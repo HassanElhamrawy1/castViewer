@@ -17,7 +17,11 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+private slots:
+     void updateScreen(); /* private slote to be able to bind to Qtimer easly*/
+
 private:
     Ui::MainWindow *ui;
+
 };
 #endif // MAINWINDOW_H
