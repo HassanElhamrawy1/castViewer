@@ -1,0 +1,9 @@
+# ninja log v6
+24	1346	7850854221575130	castViewer_autogen/timestamp	52a55ed77394d276
+24	1346	7850854221575130	castViewer_autogen/mocs_compilation.cpp	52a55ed77394d276
+24	1346	7850854221575130	C:/Users/h.elhamrawy/Music/CPP/Qt/castViewer/build/Desktop_Qt_6_9_0_MinGW_64_bit-Debug/castViewer_autogen/timestamp	52a55ed77394d276
+24	1346	7850854221575130	C:/Users/h.elhamrawy/Music/CPP/Qt/castViewer/build/Desktop_Qt_6_9_0_MinGW_64_bit-Debug/castViewer_autogen/mocs_compilation.cpp	52a55ed77394d276
+1347	4221	7850854222874187	CMakeFiles/castViewer.dir/castViewer_autogen/mocs_compilation.cpp.obj	45dd2a5276f7caf6
+1351	4239	7850854222923002	CMakeFiles/castViewer.dir/main.cpp.obj	f44b119269009923
+1356	4480	7850854222962069	CMakeFiles/castViewer.dir/mainwindow.cpp.obj	9a88b96e3138d930
+4480	4786	7850854254211039	castViewer.exe	7cd5fc3d8aeeea56
