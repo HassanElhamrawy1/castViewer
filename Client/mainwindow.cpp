@@ -4,6 +4,10 @@
 #include <QGuiApplication>              /* to get a screenshot (APIs to capture the screen image) */
 #include <QBuffer>                      /* to store the image into buffer before sending it  */
 #include <QDebug>                       /* to write debig messages on the screen */
+#include "FramesSender.h"
+#include <QThread>
+
+
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -13,11 +17,28 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    // default: connect to localhost; edit UI later to change IP
+    /* default: connect to localhost; edit UI later to change IP */
     socket->connectToHost("127.0.0.1", 45454);
 
+
+    /* Create a separate thread for sending frames */
+    senderThread = new QThread(this);
+    frameSender = new FramesSender(nullptr);
+    frameSender->setSocket(socket);
+
+    /* Move worker to thread */
+    frameSender->moveToThread(senderThread);
+
+    /* Start thread */
+    senderThread->start();
+
+    /* Connect signal to worker */
+    connect(this, &MainWindow::frameReady, frameSender, &FramesSender::encodeFrame);
+
+    connect(frameSender, &FramesSender::frameEncoded, this, [this](const QByteArray& packet){ socket->write(packet);});
+
     connect(timer, &QTimer::timeout, this, &MainWindow::sendScreen);  /* call sendScreen on every timeout of the timer */
-    timer->start(1000); // every 1 second
+    timer->start(100); /* 10 frames every 1 second */
 }
 
 MainWindow::~MainWindow()
@@ -31,21 +52,9 @@ void MainWindow::sendScreen()
     if (!screen || socket->state() != QAbstractSocket::ConnectedState) return;   /* return if the socket is not connected to the server  or if there is no screen */
 
     QPixmap pix = screen->grabWindow(0);                       /* 0 means we capturing the whole screen */
-    QByteArray bytes;
-    QBuffer buffer(&bytes);                                    /*  used as temp memory to save the QBuffer into QByteArray*/
-    buffer.open(QIODevice::WriteOnly);
-    pix.save(&buffer, "JPG", 50);                              /* saving the image in bytes with quality 50% */
+    /* scaling down the image before compressing */
+    pix = pix.scaled(pix.width()/2, pix.height()/2, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
-    QByteArray packet;
-    QDataStream out(&packet, QIODevice::WriteOnly);            /* make the packet ready to be sent */
-    out.setByteOrder(QDataStream::BigEndian);                  /* set the byte order to be compatible with the server */
-
-
-    out << static_cast<qint32>(bytes.size());                  /* send the image length first to garantee the image will be sent compeletly to the server */
-    packet.append(bytes);                                      /* appent the message data after the length */
-    if(socket->state() == QAbstractSocket::ConnectedState)
-    {
-        socket->write(packet);                                     /* send the message on the on the TCP if the socket is connected */
-    }
+    emit frameReady(pix);                             /* send the frame worker to the thread */
 
 }

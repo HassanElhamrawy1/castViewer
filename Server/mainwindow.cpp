@@ -3,6 +3,7 @@
 #include <QPixmap>                    /* to show the image on the Qlabel */
 #include <QDebug>                     /* to write debugging message on the screen */
 #include <Qpainter>                   /* if we need to draw picture of fill spaces */
+#include <QMouseEvent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -11,6 +12,9 @@ MainWindow::MainWindow(QWidget *parent)
     , clientSocket(nullptr)                                         /* initially there is no clients */
 {
     ui->setupUi(this);                                              /* bind all the UI with the actual window */
+
+    this->installEventFilter(this);                  /* here we are telling the Qt any Event occurs in the MainWindow send it to me first */
+
 
     connect(server, &QTcpServer::newConnection,
             this, &MainWindow::onNewConnection);                    /* call onNewConnection when a client request new connection */
@@ -65,4 +69,22 @@ void MainWindow::onReadyRead()
             Qt::SmoothTransformation            /* make the image smooth when we change the size */
             ));
     }
+}
+
+/* this function will be called everytime we event happened */
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if (event->type() == QEvent::MouseMove)
+    {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+
+        QPoint pos = mouseEvent->pos();
+
+        qDebug() << "[SERVER] Mouse moved at:" << pos;         /* print the position to make sure everything is working */
+
+        // later we will send this to the client
+        return false;
+    }
+
+    return QMainWindow::eventFilter(obj, event);
 }
