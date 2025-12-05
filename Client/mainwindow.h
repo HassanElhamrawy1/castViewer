@@ -6,6 +6,7 @@
 #include <QTimer>
 #include "FramesSender.h"
 #include <QThread>
+#include <QtEndian>
 
 class FramesSender;
 class QThread;
@@ -24,8 +25,9 @@ public:
 
 private slots:
     void sendScreen();
-    void processControlPacket(QByteArray data);
-    void onReadyRead();
+    void processControlPacket(QByteArray &data);       /* slot for socket readyRead */
+    void onReadyRead();             /* Parse control packets mouse/keyboard */
+
 
 signals:
     void frameReady(const QPixmap& pixmap);
@@ -36,6 +38,7 @@ private:
     QTimer *timer;
     QThread* senderThread;
     FramesSender* frameSender;
+    QByteArray recvBuffer;                      /* Buffer for incoming Bytes */
 
 };
 

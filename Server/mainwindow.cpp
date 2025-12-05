@@ -28,6 +28,8 @@ MainWindow::MainWindow(QWidget *parent)
     }
 }
 
+
+
 MainWindow::~MainWindow()             /* responsible for cleaning the memory after closing the application */
 {
     delete ui;
@@ -71,20 +73,51 @@ void MainWindow::onReadyRead()
     }
 }
 
+
+
 /* this function will be called everytime we event happened */
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
-    if (event->type() == QEvent::MouseMove)
+    /* Handle only mouse-related events */
+    if (event->type() == QEvent::MouseMove ||
+        event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::MouseButtonRelease)
     {
-        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+        /* Convert the generic event into a QMouseEvent */
+        QMouseEvent *mouse = static_cast<QMouseEvent*>(event);
 
-        QPoint pos = mouseEvent->pos();
+        /* Ensure socket is valid and connected */
+        if (!clientSocket || clientSocket->state() != QAbstractSocket::ConnectedState)
+            return false;
 
-        qDebug() << "[SERVER] Mouse moved at:" << pos;         /* print the position to make sure everything is working */
+        /* Prepare a control packet to send mouse input to the client */
+        QByteArray ctrlPacket;
+        QDataStream out(&ctrlPacket, QIODevice::WriteOnly);
+        out.setByteOrder(QDataStream::BigEndian);
 
-        // later we will send this to the client
-        return false;
+        /* Packet type = 2 (mouse control packet) */
+        out << static_cast<qint32>(2);
+
+        /* Send mouse coordinates */
+        out << static_cast<qint32>(mouse->position().x());
+        out << static_cast<qint32>(mouse->position().y());
+
+        /* Send mouse button */
+        out << static_cast<qint32>(mouse->button());
+
+        /* Send event type (press / release / move) */
+        out << static_cast<qint32>(event->type());
+
+        /* Send the packet to the client */
+        if (clientSocket && clientSocket->state() == QAbstractSocket::ConnectedState)
+        {
+            clientSocket->write(ctrlPacket);
+        }
+
+        /* Returning true blocks local mouse interaction on the server window */
+        return true;
     }
 
+    /* Default handling for other events */
     return QMainWindow::eventFilter(obj, event);
 }

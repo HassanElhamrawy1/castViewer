@@ -25,7 +25,7 @@ private slots:
 private:
     Ui::MainWindow *ui;                 /* the user interface object */
     QTcpServer *server;                 /*TCP IP server */
-    QTcpSocket *clientSocket;           /* connecting to the the client through the soclet */
+    QTcpSocket *clientSocket = nullptr;           /* connecting to the the client through the soclet */
     //QByteArray buffer;                  /* assemble the data before making the image the in tcp ip we are not sure that the data will be send in one time before showing it */
 };
 
