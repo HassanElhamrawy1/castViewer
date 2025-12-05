@@ -13,7 +13,8 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);                                              /* bind all the UI with the actual window */
 
-    this->installEventFilter(this);                  /* here we are telling the Qt any Event occurs in the MainWindow send it to me first */
+    qApp->installEventFilter(this);                  /* if we use this here we are telling the Qt any Event occurs in the MainWindow send it to me first
+                                                        but we need to monitor everything in the app so we need o use qApp */
 
 
     connect(server, &QTcpServer::newConnection,
