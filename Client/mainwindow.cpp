@@ -6,7 +6,12 @@
 #include <QDebug>                       /* to write debig messages on the screen */
 #include "FramesSender.h"
 #include <QThread>
-
+#include <QDataStream>                  /* to read the packets */
+#include <QCursor>
+#include <QApplication>
+#include <QWindow>
+#include <QWidget>
+#include <QMouseEvent>
 
 
 MainWindow::MainWindow(QWidget *parent)
@@ -37,6 +42,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(frameSender, &FramesSender::frameEncoded, this, [this](const QByteArray& packet){ socket->write(packet);});
 
+    /* when we receive readyRead signal on the network the onReadyRead will be called */
+    connect(socket, &QTcpSocket::readyRead, this, &MainWindow::onReadyRead);
+
     connect(timer, &QTimer::timeout, this, &MainWindow::sendScreen);  /* call sendScreen on every timeout of the timer */
     timer->start(100); /* 10 frames every 1 second */
 }
@@ -58,3 +66,44 @@ void MainWindow::sendScreen()
     emit frameReady(pix);                             /* send the frame worker to the thread */
 
 }
+
+void MainWindow::onReadyRead()
+{
+    /* Read all available bytes from the socket */
+    QByteArray data = socket->readAll();
+
+    /* Process control packets (mouse/keyboard) and screen frames */
+    processControlPacket(data);
+
+    // If you already have code processing screen frames,
+    // keep that code here too.
+
+    // NOTE:
+    // If image frames are sent on the same socket without a packetType prefix,
+    // you'll need to merge parsers: read length prefix and handle image frames too.
+}
+
+void MainWindow::processControlPacket(QByteArray data)
+{
+    QDataStream in(&data, QIODevice::ReadOnly);
+    in.setByteOrder(QDataStream::BigEndian);
+
+    qint32 packetType;
+    in >> packetType;
+
+    if (packetType == 2)  /* Mouse event */
+    {
+        int x, y, button, action;
+        in >> x >> y >> button >> action;
+
+        /* Debugging */
+        qDebug() << "[CLIENT] Mouse Event Received:";
+        qDebug() << "   Position:" << x << y;
+        qDebug() << "   Button:" << button << "Action:" << action;
+
+        /* TO_DO the real mouse movements */
+    }
+}
+
+
+
