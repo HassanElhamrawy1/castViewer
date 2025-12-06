@@ -84,91 +84,140 @@ void MainWindow::onReadyRead()
     while (true)
     {
         /* Need at least 4 bytes for packetType */
-        if (total - offset < 4) break;
+        if (total - offset < 4)
+            break;
 
         qint32 packetType = qFromBigEndian<qint32>(*(const qint32*)(dataPtr + offset));
         offset += 4;
 
+        /***************************** CASE 1: IMAGE PACKET *****************************/
         if (packetType == 1)
         {
             /* Image packet: need 4 bytes length + that many bytes */
-            if (total - offset < 4) { offset -= 4; break; } // unread packetType
+            if (total - offset < 4)
+            {
+                offset -= 4; /* unread packetType */
+                break;
+            }
+
             qint32 imgSize = qFromBigEndian<qint32>(*(const qint32*)(dataPtr + offset));
             offset += 4;
 
-            if (total - offset < imgSize) { offset -= 8; break; } // not full yet
+            /* Wait until full image arrives */
+            if (total - offset < imgSize)
+            {
+                offset -= 8; /* unread type + size */
+                break;
+            }
 
             QByteArray imgData = recvBuffer.mid(offset, imgSize);
             offset += imgSize;
 
-            // Process the image (display)
+            /* Process the image (display) */
             QPixmap pix;
             if (pix.loadFromData(imgData, "JPG"))
             {
-                ui->labelInfo->setPixmap(pix.scaled(ui->labelInfo->size(),
-                                                      Qt::KeepAspectRatio,
-                                                      Qt::SmoothTransformation));
-            } else {
+                ui->labelInfo->setPixmap(
+                    pix.scaled(ui->labelInfo->size(),
+                               Qt::KeepAspectRatio,
+                               Qt::SmoothTransformation)
+                    );
+            }
+            else
+            {
                 qDebug() << "[CLIENT] Failed to load image data";
             }
         }
-        else if (packetType == 2)
+        /***************************** NO MORE CONTROL PACKETS HERE *****************************/
+        else
         {
-            /* Control packet: x,y,button,action -> each 4 bytes (qint32) */
-            const int controlPayloadBytes = 4 * 4;
-            if (total - offset < controlPayloadBytes) { offset -= 4; break; } // unread packetType
+            qDebug() << "[CLIENT] Unknown packetType:" << packetType;
+            /* If unknown, stop to avoid infinite loop */
+            break;
+        }
+    }
 
-            qint32 x = qFromBigEndian<qint32>(*(const qint32*)(dataPtr + offset)); offset += 4;
-            qint32 y = qFromBigEndian<qint32>(*(const qint32*)(dataPtr + offset)); offset += 4;
-            qint32 button = qFromBigEndian<qint32>(*(const qint32*)(dataPtr + offset)); offset += 4;
-            qint32 action = qFromBigEndian<qint32>(*(const qint32*)(dataPtr + offset)); offset += 4;
+    /* Remove processed bytes from recvBuffer */
+    if (offset > 0)
+        recvBuffer.remove(0, offset);
+}
 
-            /* Debug: print received control */
-            qDebug() << "[CLIENT] Mouse Event Received: pos=" << x << y << "button=" << button << "action=" << action;
 
-            /* Map coordinates if needed (assume same resolution for now) */
-            int localX = x;
-            int localY = y;
 
-            /* Move cursor */
-            QCursor::setPos(localX, localY);
 
-            /* Optionally simulate press/release inside Qt widgets (not system-wide) */
-            QWidget *w = QApplication::widgetAt(QPoint(localX, localY));
-            if (!w) w = this;
 
-            QPoint posInWidget = w->mapFromGlobal(QPoint(localX, localY));
+void MainWindow::processControlPacket( QByteArray &data)
+{
+    QDataStream in(&data, QIODevice::ReadOnly);
+    in.setByteOrder(QDataStream::BigEndian);
+
+    /* If the buffer might contain multiple packets, you should loop; for simplicity we assume single packet.*/
+    /* Read packet type */
+    qint32 packetType = 0;
+    if (in.status() != QDataStream::Ok) return;
+    in >> packetType;
+
+    if (packetType == 2) // Mouse event
+    {
+        int x = 0, y = 0, button = 0, action = 0;
+        in >> x >> y >> button >> action;
+
+        /* DEBUG: print what we received */
+        qDebug() << "[CLIENT] Mouse Event Received: pos=" << x << y << " button=" << button << " action=" << action;
+
+        /* Map server coordinates to client screen coordinates if resolutions differ.
+           Here we assume server sends screen coordinates relative to server screen size.
+           If you know serverScreenSize (wServer,hServer), scale to local:
+             int localX = x * (localWidth / (double)wServer);
+             int localY = y * (localHeight / (double)hServer);
+           For now, assume same resolution: */
+        int localX = x;
+        int localY = y;
+
+        /* Move cursor */
+        QCursor::setPos(localX, localY);
+
+        /* Simulate mouse press/release depending on action:
+                action==0 -> move only; action==1 -> press; action==2 -> release; action==3 -> click */
+        if (action == 1 || action == 2 || action == 3)
+        {
+            /* find the widget under cursor */
+            QPoint globalPos(localX, localY);
+            QWidget *w = QApplication::widgetAt(globalPos);
+            if (!w) w = this; /* fallback */
+
+            /* Translate global position to widget-local coordinates */
+            QPoint posInWidget = w->mapFromGlobal(globalPos);
+
             Qt::MouseButton mb = Qt::LeftButton;
             if (button == 2) mb = Qt::RightButton;
             else if (button == 3) mb = Qt::MiddleButton;
 
-            if (action == 1) { // press
-                QMouseEvent pressEv(QEvent::MouseButtonPress, posInWidget, QPoint(localX, localY), mb, mb, Qt::NoModifier);
+            if (action == 1) // press
+            {
+                QMouseEvent pressEv(QEvent::MouseButtonPress, posInWidget, globalPos, mb, mb, Qt::NoModifier);
                 QApplication::sendEvent(w, &pressEv);
-            } else if (action == 2) { // release
-                QMouseEvent relEv(QEvent::MouseButtonRelease, posInWidget, QPoint(localX, localY), mb, mb, Qt::NoModifier);
-                QApplication::sendEvent(w, &relEv);
-            } else if (action == 3) { // click
-                QMouseEvent pressEv(QEvent::MouseButtonPress, posInWidget, QPoint(localX, localY), mb, mb, Qt::NoModifier);
+            }
+            else if (action == 2) // release
+            {
+                QMouseEvent releaseEv(QEvent::MouseButtonRelease, posInWidget, globalPos, mb, mb, Qt::NoModifier);
+                QApplication::sendEvent(w, &releaseEv);
+            }
+            else if (action == 3) // click = press+release
+            {
+                QMouseEvent pressEv(QEvent::MouseButtonPress, posInWidget, globalPos, mb, mb, Qt::NoModifier);
                 QApplication::sendEvent(w, &pressEv);
-                QMouseEvent relEv(QEvent::MouseButtonRelease, posInWidget, QPoint(localX, localY), mb, mb, Qt::NoModifier);
-                QApplication::sendEvent(w, &relEv);
+                QMouseEvent releaseEv(QEvent::MouseButtonRelease, posInWidget, globalPos, mb, mb, Qt::NoModifier);
+                QApplication::sendEvent(w, &releaseEv);
             }
         }
-        else {
-            qDebug() << "[CLIENT] Unknown packetType:" << packetType;
-            /* If unknown, we stop to avoid infinite loop */
-            break;
-        }
-    } /* end while loop */
-
-    // Remove processed bytes from recvBuffer */
-    if (offset > 0) {
-        recvBuffer.remove(0, offset);
+    }
+    else
+    {
+        qDebug() << "[CLIENT] Unknown packetType:" << packetType;
+        /* If packetType==1 (frame) or other, you should forward data to your frame parser. */
     }
 }
-
-
 
 /* this function will be called everytime we event happened */
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
@@ -219,4 +268,3 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
     /* Default handling for other events */
     return QMainWindow::eventFilter(obj, event);
 }
-

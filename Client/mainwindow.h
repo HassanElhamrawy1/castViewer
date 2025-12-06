@@ -27,7 +27,7 @@ public:
 private slots:
     void sendScreen();
     void onReadyRead();             /* Parse control packets mouse/keyboard */
-
+    void processControlPacket(QByteArray &data);       /* slot for socket readyRead */
 
 signals:
     void frameReady(const QPixmap& pixmap);
