@@ -22,10 +22,10 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void sendScreen();
-    void processControlPacket(QByteArray &data);       /* slot for socket readyRead */
     void onReadyRead();             /* Parse control packets mouse/keyboard */
 
 

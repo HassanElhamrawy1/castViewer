@@ -22,6 +22,9 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    qApp->installEventFilter(this);                  /* if we use this here we are telling the Qt any Event occurs in the MainWindow send it to me first
+                                                        but we need to monitor everything in the app so we need o use qApp */
+
     /* default: connect to localhost; edit UI later to change IP */
     socket->connectToHost("127.0.0.1", 45454);
 
@@ -167,77 +170,53 @@ void MainWindow::onReadyRead()
 
 
 
-void MainWindow::processControlPacket( QByteArray &data)
+/* this function will be called everytime we event happened */
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
-    QDataStream in(&data, QIODevice::ReadOnly);
-    in.setByteOrder(QDataStream::BigEndian);
-
-    /* If the buffer might contain multiple packets, you should loop; for simplicity we assume single packet.*/
-    /* Read packet type */
-    qint32 packetType = 0;
-    if (in.status() != QDataStream::Ok) return;
-    in >> packetType;
-
-    if (packetType == 2) // Mouse event
+    /* Handle only mouse-related events */
+    if (event->type() == QEvent::MouseMove ||
+        event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::MouseButtonRelease)
     {
-        int x = 0, y = 0, button = 0, action = 0;
-        in >> x >> y >> button >> action;
+        /* Convert the generic event into a QMouseEvent */
+        QMouseEvent *mouse = static_cast<QMouseEvent*>(event);
 
-        /* DEBUG: print what we received */
-        qDebug() << "[CLIENT] Mouse Event Received: pos=" << x << y << " button=" << button << " action=" << action;
+        /* Ensure socket is valid and connected */
+        if (!socket || socket->state() != QAbstractSocket::ConnectedState)
+            return false;
 
-        /* Map server coordinates to client screen coordinates if resolutions differ.
-           Here we assume server sends screen coordinates relative to server screen size.
-           If you know serverScreenSize (wServer,hServer), scale to local:
-             int localX = x * (localWidth / (double)wServer);
-             int localY = y * (localHeight / (double)hServer);
-           For now, assume same resolution: */
-        int localX = x;
-        int localY = y;
+        /* Prepare a control packet to send mouse input to the client */
+        QByteArray ctrlPacket;
+        QDataStream out(&ctrlPacket, QIODevice::WriteOnly);
+        out.setByteOrder(QDataStream::BigEndian);
 
-        /* Move cursor */
-        QCursor::setPos(localX, localY);
+        /* Packet type = 2 (mouse control packet) */
+        out << static_cast<qint32>(2);
 
-        /* Simulate mouse press/release depending on action:
-                action==0 -> move only; action==1 -> press; action==2 -> release; action==3 -> click */
-        if (action == 1 || action == 2 || action == 3)
+        /* Send mouse coordinates */
+        out << static_cast<qint32>(mouse->position().x());
+        out << static_cast<qint32>(mouse->position().y());
+
+        /* Send mouse button */
+        out << static_cast<qint32>(mouse->button());
+
+        /* Send event type (press / release / move) */
+        out << static_cast<qint32>(event->type());
+
+        /* Send the packet to the client */
+        if (socket && socket->state() == QAbstractSocket::ConnectedState)
         {
-            /* find the widget under cursor */
-            QPoint globalPos(localX, localY);
-            QWidget *w = QApplication::widgetAt(globalPos);
-            if (!w) w = this; /* fallback */
-
-            /* Translate global position to widget-local coordinates */
-            QPoint posInWidget = w->mapFromGlobal(globalPos);
-
-            Qt::MouseButton mb = Qt::LeftButton;
-            if (button == 2) mb = Qt::RightButton;
-            else if (button == 3) mb = Qt::MiddleButton;
-
-            if (action == 1) // press
-            {
-                QMouseEvent pressEv(QEvent::MouseButtonPress, posInWidget, globalPos, mb, mb, Qt::NoModifier);
-                QApplication::sendEvent(w, &pressEv);
-            }
-            else if (action == 2) // release
-            {
-                QMouseEvent releaseEv(QEvent::MouseButtonRelease, posInWidget, globalPos, mb, mb, Qt::NoModifier);
-                QApplication::sendEvent(w, &releaseEv);
-            }
-            else if (action == 3) // click = press+release
-            {
-                QMouseEvent pressEv(QEvent::MouseButtonPress, posInWidget, globalPos, mb, mb, Qt::NoModifier);
-                QApplication::sendEvent(w, &pressEv);
-                QMouseEvent releaseEv(QEvent::MouseButtonRelease, posInWidget, globalPos, mb, mb, Qt::NoModifier);
-                QApplication::sendEvent(w, &releaseEv);
-            }
+            socket->write(ctrlPacket);
         }
-    }
-    else
-    {
-        qDebug() << "[CLIENT] Unknown packetType:" << packetType;
-        /* If packetType==1 (frame) or other, you should forward data to your frame parser. */
-    }
-}
 
+
+
+
+        /* Returning true blocks local mouse interaction on the server window */
+        return true;
+    }
+
+    /* Default handling for other events */
+    return QMainWindow::eventFilter(obj, event);
+}
 
