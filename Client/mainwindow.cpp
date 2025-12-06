@@ -43,7 +43,15 @@ MainWindow::MainWindow(QWidget *parent)
     /* Connect signal to worker */
     connect(this, &MainWindow::frameReady, frameSender, &FramesSender::encodeFrame);
 
-    connect(frameSender, &FramesSender::frameEncoded, this, [this](const QByteArray& packet){ socket->write(packet);});
+    //connect(frameSender, &FramesSender::frameEncoded, this, [this](const QByteArray& packet){ socket->write(packet);});
+
+    connect(frameSender, &FramesSender::frameEncoded, this, [this](const QByteArray &packet){
+        if (socket && socket->state() == QAbstractSocket::ConnectedState)
+        {
+            socket->write(packet);
+            qDebug() << "[CLIENT] Sent frame:" << packet.size() << "bytes";
+        }
+    });
 
     /* when we receive readyRead signal on the network the onReadyRead will be called */
     connect(socket, &QTcpSocket::readyRead, this, &MainWindow::onReadyRead);

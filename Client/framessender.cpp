@@ -11,24 +11,30 @@ void FramesSender::setSocket(QTcpSocket* s)
     socket = s;
 }
 
+
 void FramesSender::encodeFrame(const QPixmap& pixmap)
 {
     if (!socket || socket->state() != QAbstractSocket::ConnectedState)
         return;
 
-    QByteArray bytes;                                           /*  used as temp memory to save the QBuffer into QByteArray*/
+    QByteArray bytes;
     QBuffer buffer(&bytes);
     buffer.open(QIODevice::WriteOnly);
-
     pixmap.save(&buffer, "JPG", 30);                            /* saving the image in bytes with quality 30% (compressed Image)*/
 
-    // Prepare packet with size prefix
     QByteArray packet;
     QDataStream out(&packet, QIODevice::WriteOnly);             /* make the packet ready to be sent */
     out.setByteOrder(QDataStream::BigEndian);                   /* set the byte order to be compatible with the server */
 
-    out << static_cast<qint32>(bytes.size());                   /* send the image length first to garantee the image will be sent compeletly to the server */
-    packet.append(bytes);                                       /* appent the message data after the length */
+    // **Packet Type = 1 (image)**
+    out << static_cast<qint32>(1);
 
-    emit frameEncoded(packet);                                      /* send the message on the on the TCP if the socket is connected */
+    /* send the image length first to garantee the image will be sent compeletly to the server */
+    out << static_cast<qint32>(bytes.size());
+
+    /* appent the message data after the length */
+    packet.append(bytes);
+
+    /* send the message on the on the TCP if the socket is connected */
+    emit frameEncoded(packet);
 }
